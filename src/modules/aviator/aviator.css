@@ -1,0 +1,31 @@
+body {
+    margin: 0;
+    padding: 0;
+  }
+  
+  .graph-container {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+  }
+  
+  .plane {
+    position: absolute;
+    top: 50%; /* Initial vertical position, adjust as needed */
+    left: 50%; /* Initial horizontal position, adjust as needed */
+    width: 50px; /* Adjust the width of your plane */
+    height: 50px; /* Adjust the height of your plane */
+    /* transform: translate(-0%, -0%); Center the plane */
+    animation: movePlane 2s linear infinite; /* Adjust animation duration (6s in this example) */
+  }
+  
+  @keyframes movePlane {
+    0% {
+      transform: translate(-50%, -50%) translateZ(0); /* Initial position in the z-direction */
+    }
+    100% {
+      transform: translate(-50%, -50%) translateZ(6em); /* Final position in the z-direction (6em in this example) */
+    }
+  }
+  

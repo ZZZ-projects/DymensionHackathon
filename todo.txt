@@ -1,0 +1,5 @@
+Quantum RNG code
+
+Complex game mechanisms with smartcontract integration
+
+Graphics and visuals: need to make all of the card visuals and css etc look pretty

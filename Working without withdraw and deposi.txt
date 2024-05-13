@@ -1,0 +1,59 @@
+Working without withdraw and deposit:
+
+import React, { useState, useEffect, useMemo } from 'react';
+import Header from '../../components/header';
+import { useRecoilValue } from 'recoil';
+import { AccountState } from '../../recoil';
+import { ethers } from 'ethers';
+import { IoMdEye } from "react-icons/io";
+import { BiWallet, BiMoneyWithdraw } from "react-icons/bi";
+
+export default function Account() {
+    const account = useRecoilValue(AccountState);
+    const [bal, setBal] = useState('');
+    const [error, setError] = useState('');
+
+    // Ensure the provider URL is correct for Dymension's blockchain
+    const provider = useMemo(() => new ethers.providers.JsonRpcProvider("https://dymension-evm.blockpi.network/v1/rpc/public"), []);
+
+    useEffect(() => {
+        if (!account) return;
+        
+        const getBalance = async () => {
+            try {
+                // Fetch native balance
+                const balance = await provider.getBalance(account);
+                setBal(ethers.utils.formatEther(balance)); // Convert from wei to DYM
+            } catch (e) {
+                console.error(e);
+                setError('Failed to fetch balance.');
+            }
+        };
+        getBalance();
+    }, [account, provider]);
+
+    // Assume deposit and withdraw functions will handle DYM transactions
+    const deposit = async () => {
+        // Implement deposit functionality if applicable
+    };
+
+    const withdraw = async () => {
+        // Implement withdraw functionality if applicable
+    };
+
+    return (
+        <div className='w-full h-screen py-4 px-4 text-white' style={{ background: "#2c3139" }}>
+            <Header account={account} />
+            {error && <p className="error">{error}</p>}
+            <div className='flex w-full space-x-6 py-8'>
+                <div className='flex w-full flex-col space-y-3'>
+                    <div className='flex items-center w-full justify-start space-x-2'>
+                        <IoMdEye className='text-2xl' />
+                        <h5>Total balance: {bal} DYM</h5>
+                    </div>
+                    {/* Display buttons if deposit and withdraw functionalities are applicable */}
+                </div>
+            </div>
+        </div>
+    );
+}

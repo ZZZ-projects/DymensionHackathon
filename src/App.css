@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+
+
+@keyframes colorChange {
+  0% { color: #414A4C; }
+  50% { color: #4c5040; } 
+  100% { color: #667440; } 
+}
+
+.animate-color-change {
+  animation: colorChange 1s infinite;
+}

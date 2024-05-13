@@ -1,0 +1,248 @@
+SMART CONTRACT FOR 1v1 GAME MODE TO DEPLOY:
+
+Explanation:
+
+GameState Enum: Defines all possible states throughout the game cycle, ensuring a clear progression from joining, through betting, to game resolution.
+Player Struct: Contains essential data for each player, including their Ethereum address, current bet, hand of cards, and whether they are active in the game.
+Events: Emit useful information about the game's progress to the frontend or other listeners.
+Constructor: Sets the dealer and initializes the deck.
+Modifiers: Help enforce correct access and game flow, preventing actions out of turn or by unauthorized entities.
+Betting Logic: Both players are required to place equal bets to continue the game. The state transitions from Player 1 betting to Player 2 betting, then to decision-making phases.
+Dealing Cards: Cards are dealt to players once both bets are placed. A simple shuffle mechanism randomizes the distribution of cards.
+Player Decisions: Players can either call to continue the game or fold to end it immediately. If a player folds, the pot is awarded to the other player, and the game resets.
+Game Reset: Resets the game state and
+Reveal Hands: Once the decision phase is completed, the cards are revealed. The dealer triggers this phase, revealing each player's hand to determine the winner.
+Calculate Hand Score: A function to calculate the score of a hand based on the occurrence of pairs, three of a kinds, and four of a kinds.
+Conclude Game: This function handles the distribution of the pot to the winner and resets the game state for a new round.
+Handle Tie: If the scores are equal, the pot is split between the two players.
+Get Player Hand: A utility function to retrieve and display a player's hand, which can be used for debugging or providing game transparency to players.
+
+TO DEPLOY SEE:
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract PicturePoker {
+    enum GameState {
+        WaitingForPlayers,
+        WaitingForPlayer1Bet,
+        WaitingForPlayer2Bet,
+        Player1Decision,
+        Player2Decision,
+        Reveal,
+        SettlePayout,
+        GameEnded
+    }
+
+    struct Player {
+        address addr;
+        uint256 betAmount;
+        uint8[] hand;
+        bool active;
+    }
+
+    GameState public currentState = GameState.WaitingForPlayers;
+    Player[2] public players;
+    uint256 public pot;
+    uint8[] private deck;
+    address public dealer;
+
+    event PlayerJoined(address player);
+    event BetPlaced(address player, uint256 amount);
+    event DecisionMade(address player, string decision);
+    event GameEnded(address winner, uint256 amount);
+
+    constructor() {
+        dealer = msg.sender;
+        setupDeck();
+    }
+
+    modifier inState(GameState _state) {
+        require(currentState == _state, "Invalid state for this action");
+        _;
+    }
+
+    modifier onlyPlayer() {
+        require(msg.sender == players[0].addr || msg.sender == players[1].addr, "Not a participant");
+        _;
+    }
+
+    modifier onlyDealer() {
+        require(msg.sender == dealer, "Only dealer can perform this action");
+        _;
+    }
+
+    function joinGame() external inState(GameState.WaitingForPlayers) {
+        require(players[0].addr == address(0) || players[1].addr == address(0), "Game is already full");
+        uint8 index = players[0].addr == address(0) ? 0 : 1;
+        players[index].addr = msg.sender;
+        players[index].active = true;
+
+        if (players[0].addr != address(0) && players[1].addr != address(0)) {
+            currentState = GameState.WaitingForPlayer1Bet;
+        }
+
+        emit PlayerJoined(msg.sender);
+    }
+
+    function setupDeck() private {
+        // This is a simplified setup for demonstration. Normally, you would include proper randomization.
+        deck = [1, 2, 3, 4, 5, 6, 7, 8]; // Simplified representation of unique cards
+    }
+    // Players place their bets
+    function placeBet() external onlyPlayer inState(GameState.WaitingForPlayer1Bet) {
+        require(msg.sender == players[0].addr, "It is not Player 1's turn to bet.");
+        require(msg.value > 0, "Bet must be greater than zero.");
+
+        players[0].betAmount = msg.value;
+        pot += msg.value;
+        currentState = GameState.WaitingForPlayer2Bet;
+
+        emit BetPlaced(msg.sender, msg.value);
+    }
+
+    function placeBetPlayer2() external onlyPlayer inState(GameState.WaitingForPlayer2Bet) {
+        require(msg.sender == players[1].addr, "It is not Player 2's turn to bet.");
+        require(msg.value > 0, "Bet must be greater than zero.");
+        require(msg.value == players[0].betAmount, "Bet amount must match Player 1.");
+
+        players[1].betAmount = msg.value;
+        pot += msg.value;
+        currentState = GameState.Player1Decision;
+
+        emit BetPlaced(msg.sender, msg.value);
+        dealCards();
+    }
+
+    // Dealing cards to each player
+    function dealCards() private onlyDealer {
+        require(currentState == GameState.Player1Decision, "Cards cannot be dealt at this stage.");
+
+        // Simplified dealing mechanism for demonstration
+        shuffleDeck();
+        for (uint i = 0; i < 8; i++) {  // Assuming each player gets 4 cards
+            if (i % 2 == 0) {
+                players[0].hand.push(deck[i]);
+            } else {
+                players[1].hand.push(deck[i]);
+            }
+        }
+
+        emit HandsDealt(players[0].hand, players[1].hand);
+    }
+
+    // Simple shuffle of the deck
+    function shuffleDeck() private {
+        for (uint i = 0; i < deck.length; i++) {
+            uint j = uint(keccak256(abi.encodePacked(block.timestamp, msg.sender))) % (i + 1);
+            (deck[i], deck[j]) = (deck[j], deck[i]);
+        }
+    }
+
+    // Player 1 makes a decision to 'call' or 'fold'
+    function player1Decision(string calldata decision) external onlyPlayer inState(GameState.Player1Decision) {
+        require(msg.sender == players[0].addr, "Only Player 1 can make this decision.");
+        handleDecision(decision, 0);
+    }
+
+    // Player 2 makes a decision to 'call' or 'fold'
+    function player2Decision(string calldata decision) external onlyPlayer inState(GameState.Player2Decision) {
+        require(msg.sender == players[1].addr, "Only Player 2 can make this decision.");
+        handleDecision(decision, 1);
+    }
+
+    // Handle player decisions
+    function handleDecision(string memory decision, uint8 playerIndex) private {
+        if (keccak256(bytes(decision)) == keccak256(bytes("call"))) {
+            if (playerIndex == 0) {
+                currentState = GameState.Player2Decision;
+            } else {
+                currentState = GameState.Reveal;
+            }
+        } else if (keccak256(bytes(decision)) == keccak256(bytes("fold"))) {
+            currentState = GameState.GameEnded;
+            address winner = playerIndex == 0 ? players[1].addr : players[0].addr;
+            payable(winner).transfer(pot);
+            emit GameEnded(winner, pot);
+            resetGame();
+        }
+
+        emit DecisionMade(players[playerIndex].addr, decision);
+    }
+
+    // Reset the game to allow new players to join
+    function resetGame() private {
+        players[0] = Player(address(0), 0, new uint8[](0), false);
+        players[1] = Player(address(0), 0, new uint8[](0), false);
+        pot = 0;
+        currentState = GameState.WaitingForPlayers;
+    }
+    // Events for game progression
+    event HandsDealt(uint8[] handPlayer1, uint8[] handPlayer2);
+    event HandRevealed(address player, uint8[] hand);
+    event WinnerDetermined(address winner, uint256 payout);
+
+    // Reveal hands and determine the winner
+    function revealHands() external onlyDealer inState(GameState.Reveal) {
+        emit HandRevealed(players[0].addr, players[0].hand);
+        emit HandRevealed(players[1].addr, players[1].hand);
+
+        uint player1Score = calculateHandScore(players[0].hand);
+        uint player2Score = calculateHandScore(players[1].hand);
+
+        if (player1Score > player2Score) {
+            concludeGame(players[0].addr);
+        } else if (player2Score > player1Score) {
+            concludeGame(players[1].addr);
+        } else {
+            // Handle a tie or split pot scenario
+            handleTie();
+        }
+    }
+
+    // Calculate the score of a hand based on simplified poker rules
+    function calculateHandScore(uint8[] memory hand) private pure returns (uint) {
+        uint score = 0;
+        uint[] memory counts = new uint[](9); // Assuming a card range from 1 to 8, index 0 unused
+
+        for (uint i = 0; i < hand.length; i++) {
+            counts[hand[i]]++;
+        }
+
+        for (uint i = 1; i < counts.length; i++) {
+            if (counts[i] == 2) {
+                score += 1; // Pair
+            } else if (counts[i] == 3) {
+                score += 3; // Three of a kind
+            } else if (counts[i] == 4) {
+                score += 6; // Four of a kind
+            }
+        }
+
+        return score;
+    }
+
+    // Conclude the game by transferring the pot to the winner
+    function concludeGame(address winner) private {
+        emit WinnerDetermined(winner, pot);
+        payable(winner).transfer(pot);
+        resetGame();
+    }
+
+    // Handle a tie by splitting the pot
+    function handleTie() private {
+        uint halfPot = pot / 2;
+        payable(players[0].addr).transfer(halfPot);
+        payable(players[1].addr).transfer(halfPot);
+        emit WinnerDetermined(address(0), pot); // No winner, tie
+        resetGame();
+    }
+
+    // Utility function to display player hands (for debugging or game transparency)
+    function getPlayerHand(address playerAddress) public view returns (uint8[] memory) {
+        if (playerAddress == players[0].addr) {
+            return players[0].hand;
+        } else if (playerAddress == players[1].addr) {
+            return players[1].hand;
+        }
+        return new uint8 ;
+    }
